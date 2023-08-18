@@ -19,32 +19,23 @@
 package commands
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 
+	"github.com/k1ng440/gowc/internal/arguments"
 	"github.com/k1ng440/gowc/internal/counter"
 	"github.com/k1ng440/gowc/internal/file"
+	"github.com/k1ng440/gowc/internal/printer"
 )
 
 // Version is the version of the program
 // This variable is set at compile time
 var Version = "0.0.1"
 
-type Arguments struct {
-	Files0From    string
-	Files         []string
-	Bytes         bool
-	Chars         bool
-	Lines         bool
-	MaxLineLength bool
-	Words         bool
-	Help          bool
-	Version       bool
-}
-
 func Run() {
-	args := parseArguments()
+	args := arguments.ParseArguments()
 
 	if args.HasHelp() {
 		flag.Usage()
@@ -52,7 +43,7 @@ func Run() {
 	}
 
 	if args.HasVersion() {
-		fmt.Println("wc " + Version)
+		fmt.Println("gowc " + Version)
 		return
 	}
 
@@ -62,77 +53,43 @@ func Run() {
 		os.Exit(69)
 	}
 
-	counters := make([]*counter.Counter, 0)
+	handleFiles(args)
+}
+
+func handleFiles(args arguments.Arguments) {
+	counters := make([]*counter.Counter, 0, len(args.Files))
+	printer := printer.New(args)
 
 	for _, fp := range args.Files {
 		f, err := file.New(fp)
 		if err != nil {
+			if errors.Is(err, file.ErrNotFound) {
+				fmt.Println("File does not exist:", fp)
+				continue
+			}
+
+			if errors.Is(err, file.ErrIsDir) {
+				fmt.Println("File is a directory:", fp)
+				continue
+			}
+
 			fmt.Println(err)
 			os.Exit(1)
 		}
 
 		counts, err := f.Count()
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			fmt.Printf("Error: %s, %s\n", fp, err)
+			continue
 		}
 
-		fmt.Printf("%#v\n", counts)
-
+		printer.Print(fp, counts)
 		counters = append(counters, counts)
 	}
 
 	if len(counters) > 1 {
 		total := counter.New()
-		for _, c := range counters {
-			total.Merge(c)
-		}
-
-		fmt.Printf("Total: %#v\n", total)
+		total.Merge(counters...)
+		printer.Print("total", total)
 	}
-}
-
-func parseArguments() Arguments {
-	args := Arguments{}
-
-	flag.StringVar(&args.Files0From, "files0-from", "", "read input from the "+
-		"files specified by NUL-terminated names in file F; If F is - then read"+
-		" names from standard input",
-	)
-	flag.BoolVar(&args.Bytes, "c", false, "print the byte counts")
-	flag.BoolVar(&args.Chars, "m", false, "print the character counts")
-	flag.BoolVar(&args.Lines, "l", false, "print the newline counts")
-	flag.BoolVar(&args.MaxLineLength, "L", false, "print the maximum display width")
-	flag.BoolVar(&args.Words, "w", false, "print the word counts")
-	flag.BoolVar(&args.Help, "help", false, "display this help and exit")
-	flag.BoolVar(&args.Version, "version", false, "output version information and exit")
-
-	flag.Parse()
-	args.Files = flag.Args()
-	flag.Usage = printHelp
-	return args
-}
-
-func (a Arguments) HasFiles() bool {
-	return len(a.Files) > 0
-}
-
-func (a Arguments) HasFlags() bool {
-	return a.Bytes || a.Chars || a.Lines || a.MaxLineLength || a.Words
-}
-
-func (a Arguments) HasHelp() bool {
-	return a.Help
-}
-
-func (a Arguments) HasVersion() bool {
-	return a.Version
-}
-
-func (a Arguments) HasFiles0From() bool {
-	return a.Files0From != ""
-}
-
-func (a Arguments) HasStdin() bool {
-	return len(a.Files) == 0 && !a.HasFiles0From()
 }

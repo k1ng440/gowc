@@ -26,18 +26,15 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
-	"regexp"
 	"unicode/utf8"
 
 	"github.com/k1ng440/gowc/internal/counter"
 )
 
 var (
-	ErrGlobPattern = errors.New("glob pattern")
-	ErrIsDir       = errors.New("is a directory")
-	ErrNotFound    = errors.New("no such file")
-	ErrCannotOpen  = errors.New("cannot open file")
+	ErrIsDir      = errors.New("is a directory")
+	ErrNotFound   = errors.New("no such file")
+	ErrCannotOpen = errors.New("cannot open file")
 )
 
 type File struct {
@@ -48,11 +45,6 @@ type File struct {
 func New(file string) (*File, error) {
 	f := &File{
 		Name: file,
-	}
-
-	// glob pattern (e.g. *.txt) has to be handled differently
-	if f.isGlobPattern() {
-		return nil, fmt.Errorf("%w: %s", ErrGlobPattern, f.Name)
 	}
 
 	// check if the file exists
@@ -128,30 +120,4 @@ func (f *File) Open() (err error) {
 
 func (f *File) Close() error {
 	return f.reader.Close()
-}
-
-// isGlobPattern checks if the file name is a glob pattern
-// (e.g. *.txt)
-func (f *File) isGlobPattern() bool {
-	globPattern := `^(\*|\?|\[.*\])+$`
-	match, err := regexp.MatchString(globPattern, f.Name)
-	if err != nil {
-		panic(err)
-	}
-	return match
-}
-
-func GlobFiles(file string) map[string]*File {
-	ret := map[string]*File{}
-	matches, err := filepath.Glob(file)
-	if err != nil {
-		log.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	for _, match := range matches {
-		ret[match] = &File{Name: match}
-	}
-
-	return ret
 }
